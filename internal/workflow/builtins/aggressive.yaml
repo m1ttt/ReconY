@@ -1,0 +1,52 @@
+name: aggressive
+description: "Maximum coverage — large wordlists, all tools enabled, all phases"
+phases:
+  - id: 1
+    enabled: true
+    tools:
+      - {name: whois, enabled: true}
+      - {name: dns, enabled: true}
+      - {name: waybackurls, enabled: true}
+      - {name: gau, enabled: true}
+  - id: 2
+    enabled: true
+    tools:
+      - {name: subfinder, enabled: true, threads: 50}
+      - {name: crtsh, enabled: true}
+      - {name: amass, enabled: true}
+      - {name: puredns, enabled: true, wordlists: {dns: dns_aggressive}}
+  - id: 3
+    enabled: true
+    tools:
+      - {name: nmap, enabled: true, options: {ports: "top-1000", timing: "-T4"}}
+      - {name: shodan, enabled: true}
+      - {name: censys, enabled: true}
+  - id: 4
+    enabled: true
+    tools:
+      - {name: httpx, enabled: true}
+      - {name: waf_detect, enabled: true}
+      - {name: ssl_analyze, enabled: true}
+      - {name: classify, enabled: true}
+  - id: 5
+    enabled: true
+    tools:
+      - {name: katana, enabled: true, options: {depth: 5}}
+      - {name: jsluice, enabled: true}
+      - {name: secretfinder, enabled: true}
+      - {name: paramspider, enabled: true}
+      - {name: ffuf, enabled: true, threads: 100, wordlists: {web: web_aggressive}}
+      - {name: feroxbuster, enabled: true, threads: 100, options: {depth: 6, collect_backups: true}}
+      - {name: cmseek, enabled: true}
+      - {name: gowitness, enabled: true}
+      - {name: static-analysis, enabled: true}
+  - id: 6
+    enabled: true
+    tools:
+      - {name: bucket_enum, enabled: true}
+      - {name: gitdork, enabled: true}
+      - {name: js_secrets, enabled: true}
+  - id: 7
+    enabled: true
+    tools:
+      - {name: nuclei, enabled: true, options: {severity: [info, low, medium, high, critical]}}

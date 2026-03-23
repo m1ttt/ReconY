@@ -1,0 +1,35 @@
+name: passive-only
+description: "OSINT only — no active scanning, no traffic to target"
+phases:
+  - id: 1
+    enabled: true
+    tools:
+      - {name: whois, enabled: true}
+      - {name: dns, enabled: true}
+      - {name: waybackurls, enabled: true}
+      - {name: gau, enabled: true}
+  - id: 2
+    enabled: true
+    tools:
+      - {name: subfinder, enabled: true}
+      - {name: crtsh, enabled: true}
+      - {name: amass, enabled: false}
+      - {name: puredns, enabled: false}
+  - id: 3
+    enabled: false
+    tools: []
+  - id: 4
+    enabled: false
+    tools: []
+  - id: 5
+    enabled: false
+    tools: []
+  - id: 6
+    enabled: true
+    tools:
+      - {name: bucket_enum, enabled: false}
+      - {name: gitdork, enabled: true}
+      - {name: js_secrets, enabled: false}
+  - id: 7
+    enabled: false
+    tools: []

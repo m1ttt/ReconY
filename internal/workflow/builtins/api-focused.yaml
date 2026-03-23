@@ -1,0 +1,49 @@
+name: api-focused
+description: "API-focused recon — no visual crawling, API-specific wordlists and fuzzing"
+phases:
+  - id: 1
+    enabled: true
+    tools:
+      - {name: whois, enabled: true}
+      - {name: dns, enabled: true}
+      - {name: waybackurls, enabled: true}
+      - {name: gau, enabled: true}
+  - id: 2
+    enabled: true
+    tools:
+      - {name: subfinder, enabled: true}
+      - {name: crtsh, enabled: true}
+      - {name: amass, enabled: false}
+      - {name: puredns, enabled: true, wordlists: {dns: dns_standard}}
+  - id: 3
+    enabled: true
+    tools:
+      - {name: nmap, enabled: true}
+      - {name: shodan, enabled: false}
+      - {name: censys, enabled: false}
+  - id: 4
+    enabled: true
+    tools:
+      - {name: httpx, enabled: true}
+      - {name: waf_detect, enabled: true}
+      - {name: ssl_analyze, enabled: true}
+      - {name: classify, enabled: true}
+  - id: 5
+    enabled: true
+    tools:
+      - {name: katana, enabled: false}
+      - {name: jsluice, enabled: true}
+      - {name: secretfinder, enabled: true}
+      - {name: paramspider, enabled: true}
+      - {name: ffuf, enabled: true, wordlists: {web: api_endpoints}}
+      - {name: feroxbuster, enabled: true, wordlists: {web: api_endpoints}, options: {depth: 3}}
+      - {name: cmseek, enabled: false}
+      - {name: gowitness, enabled: false}
+      - {name: static-analysis, enabled: true}
+  - id: 6
+    enabled: false
+    tools: []
+  - id: 7
+    enabled: true
+    tools:
+      - {name: nuclei, enabled: true, options: {tags: [api, graphql, swagger]}}

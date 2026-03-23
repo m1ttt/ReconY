@@ -1,0 +1,35 @@
+name: cloud-hunt
+description: "Cloud misconfigs and secrets hunting — S3 buckets, GitHub dorking, JS secrets"
+phases:
+  - id: 1
+    enabled: true
+    tools:
+      - {name: whois, enabled: true}
+      - {name: dns, enabled: true}
+      - {name: waybackurls, enabled: true}
+      - {name: gau, enabled: true}
+  - id: 2
+    enabled: true
+    tools:
+      - {name: subfinder, enabled: true}
+      - {name: crtsh, enabled: true}
+      - {name: amass, enabled: false}
+      - {name: puredns, enabled: true, wordlists: {dns: dns_standard}}
+  - id: 3
+    enabled: false
+    tools: []
+  - id: 4
+    enabled: false
+    tools: []
+  - id: 5
+    enabled: false
+    tools: []
+  - id: 6
+    enabled: true
+    tools:
+      - {name: bucket_enum, enabled: true}
+      - {name: gitdork, enabled: true}
+      - {name: js_secrets, enabled: true}
+  - id: 7
+    enabled: false
+    tools: []

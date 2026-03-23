@@ -1,0 +1,32 @@
+name: subdomain-enum
+description: "Subdomain enumeration + DNS resolution only"
+phases:
+  - id: 1
+    enabled: true
+    tools:
+      - {name: whois, enabled: true}
+      - {name: dns, enabled: true}
+      - {name: waybackurls, enabled: false}
+      - {name: gau, enabled: false}
+  - id: 2
+    enabled: true
+    tools:
+      - {name: subfinder, enabled: true}
+      - {name: crtsh, enabled: true}
+      - {name: amass, enabled: false}
+      - {name: puredns, enabled: true, wordlists: {dns: dns_standard}}
+  - id: 3
+    enabled: false
+    tools: []
+  - id: 4
+    enabled: false
+    tools: []
+  - id: 5
+    enabled: false
+    tools: []
+  - id: 6
+    enabled: false
+    tools: []
+  - id: 7
+    enabled: false
+    tools: []

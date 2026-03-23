@@ -1,0 +1,38 @@
+name: web-audit
+description: "Fingerprint + content discovery + vuln scan — assumes subdomains already discovered"
+phases:
+  - id: 1
+    enabled: false
+    tools: []
+  - id: 2
+    enabled: false
+    tools: []
+  - id: 3
+    enabled: false
+    tools: []
+  - id: 4
+    enabled: true
+    tools:
+      - {name: httpx, enabled: true}
+      - {name: waf_detect, enabled: true}
+      - {name: ssl_analyze, enabled: true}
+      - {name: classify, enabled: true}
+  - id: 5
+    enabled: true
+    tools:
+      - {name: katana, enabled: true}
+      - {name: jsluice, enabled: true}
+      - {name: secretfinder, enabled: true}
+      - {name: paramspider, enabled: true}
+      - {name: ffuf, enabled: true, wordlists: {web: web_standard}}
+      - {name: feroxbuster, enabled: true, options: {depth: 5, collect_backups: true}}
+      - {name: cmseek, enabled: true}
+      - {name: gowitness, enabled: true}
+      - {name: static-analysis, enabled: true}
+  - id: 6
+    enabled: false
+    tools: []
+  - id: 7
+    enabled: true
+    tools:
+      - {name: nuclei, enabled: true}

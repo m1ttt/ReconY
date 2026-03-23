@@ -1,0 +1,39 @@
+name: quick
+description: "Fast recon — small wordlists, essential tools only, phases 1-4"
+phases:
+  - id: 1
+    enabled: true
+    tools:
+      - {name: whois, enabled: true}
+      - {name: dns, enabled: true}
+      - {name: waybackurls, enabled: true}
+      - {name: gau, enabled: false}
+  - id: 2
+    enabled: true
+    tools:
+      - {name: subfinder, enabled: true}
+      - {name: crtsh, enabled: true}
+      - {name: amass, enabled: false}
+      - {name: puredns, enabled: true, wordlists: {dns: dns_quick}}
+  - id: 3
+    enabled: true
+    tools:
+      - {name: nmap, enabled: true, options: {ports: "top-100"}}
+      - {name: shodan, enabled: false}
+      - {name: censys, enabled: false}
+  - id: 4
+    enabled: true
+    tools:
+      - {name: httpx, enabled: true}
+      - {name: waf_detect, enabled: true}
+      - {name: ssl_analyze, enabled: false}
+      - {name: classify, enabled: true}
+  - id: 5
+    enabled: false
+    tools: []
+  - id: 6
+    enabled: false
+    tools: []
+  - id: 7
+    enabled: false
+    tools: []

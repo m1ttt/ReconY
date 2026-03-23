@@ -1,0 +1,52 @@
+name: full
+description: "Complete recon pipeline — all 7 phases with standard wordlists"
+phases:
+  - id: 1
+    enabled: true
+    tools:
+      - {name: whois, enabled: true}
+      - {name: dns, enabled: true}
+      - {name: waybackurls, enabled: true}
+      - {name: gau, enabled: true}
+  - id: 2
+    enabled: true
+    tools:
+      - {name: subfinder, enabled: true}
+      - {name: crtsh, enabled: true}
+      - {name: amass, enabled: false}
+      - {name: puredns, enabled: true, wordlists: {dns: dns_standard}}
+  - id: 3
+    enabled: true
+    tools:
+      - {name: nmap, enabled: true}
+      - {name: shodan, enabled: false}
+      - {name: censys, enabled: false}
+  - id: 4
+    enabled: true
+    tools:
+      - {name: httpx, enabled: true}
+      - {name: waf_detect, enabled: true}
+      - {name: ssl_analyze, enabled: true}
+      - {name: classify, enabled: true}
+  - id: 5
+    enabled: true
+    tools:
+      - {name: katana, enabled: true}
+      - {name: jsluice, enabled: true}
+      - {name: secretfinder, enabled: true}
+      - {name: paramspider, enabled: true}
+      - {name: ffuf, enabled: true, wordlists: {web: web_standard}}
+      - {name: feroxbuster, enabled: true, options: {depth: 4}}
+      - {name: cmseek, enabled: true}
+      - {name: gowitness, enabled: true}
+      - {name: static-analysis, enabled: true}
+  - id: 6
+    enabled: true
+    tools:
+      - {name: bucket_enum, enabled: true}
+      - {name: gitdork, enabled: true}
+      - {name: js_secrets, enabled: true}
+  - id: 7
+    enabled: true
+    tools:
+      - {name: nuclei, enabled: true}
