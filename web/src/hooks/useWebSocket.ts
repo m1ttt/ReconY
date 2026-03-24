@@ -4,13 +4,20 @@ import { useStore } from '../store'
 export function useWebSocket(workspaceId?: string) {
   const wsRef = useRef<WebSocket | null>(null)
   const addEvent = useStore((s) => s.addEvent)
+  const setConnectionStatus = useStore((s) => s.setConnectionStatus)
 
   const connect = useCallback((onReconnect?: () => void) => {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
     const wsUrl = `${protocol}//${location.host}/api/v1/ws${workspaceId ? `?workspace_id=${workspaceId}` : ''}`
 
+    setConnectionStatus('reconnecting')
+
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
+
+    ws.onopen = () => {
+      setConnectionStatus('connected')
+    }
 
     ws.onmessage = (e) => {
       try {
@@ -20,11 +27,12 @@ export function useWebSocket(workspaceId?: string) {
     }
 
     ws.onclose = () => {
+      setConnectionStatus('disconnected')
       if (onReconnect) onReconnect()
     }
 
     return ws
-  }, [workspaceId, addEvent])
+  }, [workspaceId, addEvent, setConnectionStatus])
 
   useEffect(() => {
     let mounted = true

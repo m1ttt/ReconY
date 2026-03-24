@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 )
@@ -113,37 +114,73 @@ func (m *MullvadRotator) OnRequest() {
 }
 
 // Rotate switches to a random Mullvad relay location.
+// It uses `mullvad reconnect --wait` so the OS-level tunnel is confirmed
+// before returning, eliminating the need for a fixed sleep.
 func (m *MullvadRotator) Rotate() {
 	loc := m.locations[rand.Intn(len(m.locations))]
 	log.Printf("[mullvad] Rotating to %s...", loc)
 
-	// Set relay location
-	if err := exec.Command("mullvad", "relay", "set", "location", loc).Run(); err != nil {
-		log.Printf("[mullvad] Failed to set location: %v", err)
+	// 1. Set relay location
+	if out, err := exec.Command("mullvad", "relay", "set", "location", loc).CombinedOutput(); err != nil {
+		log.Printf("[mullvad] Failed to set location %s: %v — %s", loc, err, strings.TrimSpace(string(out)))
 		return
 	}
 
-	// Reconnect
-	if err := exec.Command("mullvad", "reconnect").Run(); err != nil {
-		log.Printf("[mullvad] Failed to reconnect: %v", err)
+	// 2. Reconnect and wait until the tunnel is established (no sleep needed).
+	//    --wait blocks until connected or times out internally (~30s).
+	if out, err := exec.Command("mullvad", "reconnect", "--wait").CombinedOutput(); err != nil {
+		log.Printf("[mullvad] Failed to reconnect: %v — %s", err, strings.TrimSpace(string(out)))
 		return
 	}
 
-	// Wait for connection to establish
-	time.Sleep(3 * time.Second)
-
-	// Verify
-	out, err := exec.Command("mullvad", "status").Output()
-	if err == nil {
-		log.Printf("[mullvad] %s", string(out))
+	// 3. Log final status
+	if status, err := MullvadStatus(); err == nil {
+		log.Printf("[mullvad] %s", status)
 	}
 }
 
-// Status checks if Mullvad is connected.
+// MullvadStatus returns the current Mullvad connection status string.
 func MullvadStatus() (string, error) {
 	out, err := exec.Command("mullvad", "status").Output()
 	if err != nil {
 		return "", fmt.Errorf("mullvad not available: %w", err)
 	}
-	return string(out), nil
+	return strings.TrimSpace(string(out)), nil
+}
+
+// MullvadIsConnected returns true when Mullvad reports it is connected.
+func MullvadIsConnected() bool {
+	status, err := MullvadStatus()
+	if err != nil {
+		return false
+	}
+	lower := strings.ToLower(status)
+	return strings.Contains(lower, "connected") && !strings.Contains(lower, "disconnected")
+}
+
+// MullvadConnect ensures Mullvad is connected. It connects if not already
+// connected and waits up to maxWait for the tunnel to come up.
+func MullvadConnect(maxWait time.Duration) error {
+	// Already connected — nothing to do.
+	if MullvadIsConnected() {
+		return nil
+	}
+
+	log.Printf("[mullvad] Not connected — triggering connect...")
+	if out, err := exec.Command("mullvad", "connect", "--wait").CombinedOutput(); err != nil {
+		return fmt.Errorf("mullvad connect failed: %w — %s", err, strings.TrimSpace(string(out)))
+	}
+
+	// Confirm the connection came up.
+	deadline := time.Now().Add(maxWait)
+	for time.Now().Before(deadline) {
+		if MullvadIsConnected() {
+			status, _ := MullvadStatus()
+			log.Printf("[mullvad] Connected: %s", status)
+			return nil
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	return fmt.Errorf("mullvad did not connect within %s", maxWait)
 }

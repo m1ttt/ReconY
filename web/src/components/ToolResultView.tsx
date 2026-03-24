@@ -1,17 +1,16 @@
 import { clsx } from 'clsx'
-import { Shield, ShieldAlert, ShieldCheck, Globe, Lock, Unlock, AlertTriangle, Server, Wifi, Eye } from 'lucide-react'
+import { ShieldAlert, ShieldCheck, Globe, Lock, Unlock, Server, Wifi, Eye } from 'lucide-react'
 
 interface Props {
   toolName: string | null
   data: any[]
   selectedIds: Set<string>
   onToggle: (id: string) => void
-  onSelectAll: (ids: string[]) => void
 }
 
 // Tool-specific result renderers.
 // Returns null if no custom view exists (falls through to default table).
-export function ToolResultView({ toolName, data, selectedIds, onToggle, onSelectAll }: Props) {
+export function ToolResultView({ toolName, data, selectedIds, onToggle }: Props) {
   if (!toolName) return null
   if (!data.length) {
     return (
@@ -23,11 +22,11 @@ export function ToolResultView({ toolName, data, selectedIds, onToggle, onSelect
 
   switch (toolName) {
     case 'waf_detect':
-      return <WAFResultView data={data} selectedIds={selectedIds} onToggle={onToggle} onSelectAll={onSelectAll} />
+      return <WAFResultView data={data} selectedIds={selectedIds} onToggle={onToggle} />
     case 'ssl_analyze':
-      return <SSLResultView data={data} selectedIds={selectedIds} onToggle={onToggle} onSelectAll={onSelectAll} />
+      return <SSLResultView data={data} selectedIds={selectedIds} onToggle={onToggle} />
     case 'classify':
-      return <ClassifyResultView data={data} selectedIds={selectedIds} onToggle={onToggle} onSelectAll={onSelectAll} />
+      return <ClassifyResultView data={data} selectedIds={selectedIds} onToggle={onToggle} />
     case 'whois':
       return <WhoisResultView data={data} />
     case 'dns':
@@ -39,7 +38,7 @@ export function ToolResultView({ toolName, data, selectedIds, onToggle, onSelect
 
 // ─── WAF Detection ─────────────────────────────────────────────
 
-function WAFResultView({ data, selectedIds, onToggle, onSelectAll }: { data: any[]; selectedIds: Set<string>; onToggle: (id: string) => void; onSelectAll: (ids: string[]) => void }) {
+function WAFResultView({ data, selectedIds, onToggle }: { data: any[]; selectedIds: Set<string>; onToggle: (id: string) => void }) {
   const withWAF = data.filter((r) => r.waf_detected)
   const withCDN = data.filter((r) => r.cdn_detected)
   const clean = data.filter((r) => !r.waf_detected && !r.cdn_detected)
@@ -126,7 +125,7 @@ function WAFResultView({ data, selectedIds, onToggle, onSelectAll }: { data: any
 
 // ─── SSL Analysis ──────────────────────────────────────────────
 
-function SSLResultView({ data, selectedIds, onToggle, onSelectAll }: { data: any[]; selectedIds: Set<string>; onToggle: (id: string) => void; onSelectAll: (ids: string[]) => void }) {
+function SSLResultView({ data, selectedIds, onToggle }: { data: any[]; selectedIds: Set<string>; onToggle: (id: string) => void }) {
   const gradeColor = (grade: string) => {
     if (!grade) return 'text-muted'
     const g = grade.toUpperCase()
@@ -195,7 +194,7 @@ function SSLResultView({ data, selectedIds, onToggle, onSelectAll }: { data: any
 
 // ─── Classify ──────────────────────────────────────────────────
 
-function ClassifyResultView({ data, selectedIds, onToggle, onSelectAll }: { data: any[]; selectedIds: Set<string>; onToggle: (id: string) => void; onSelectAll: (ids: string[]) => void }) {
+function ClassifyResultView({ data, selectedIds, onToggle }: { data: any[]; selectedIds: Set<string>; onToggle: (id: string) => void }) {
   const typeIcon = (t: string) => {
     switch (t) {
       case 'spa': return <Eye size={14} className="text-accent" />

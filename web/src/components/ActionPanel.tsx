@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { clsx } from 'clsx'
 import { Play, Shield, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react'
 import { api, type ToolRegistryEntry } from '../api/client'
-import { PHASE_NAMES } from '../types'
 
 interface Props {
   selectedDataType: string | null

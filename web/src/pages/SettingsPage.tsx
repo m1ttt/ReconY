@@ -22,7 +22,7 @@ export function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [dirty, setDirty] = useState(false)
-  const saveTimeout = useRef<ReturnType<typeof setTimeout>>()
+  const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     api.getConfig().then(setConfig)
