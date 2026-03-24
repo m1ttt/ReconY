@@ -61,8 +61,8 @@ export function Sidebar() {
       {/* Logo */}
       <div className="px-4 py-5 border-b border-border">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded bg-gradient-to-br from-accent to-accent-dim flex items-center justify-center">
-            <Crosshair size={15} className="text-void" strokeWidth={2.5} />
+          <div className="w-7 h-7 rounded flex items-center justify-center overflow-hidden">
+            <img src="/logo.png" alt="ReconX Logo" className="w-full h-full object-cover" />
           </div>
           <span className="font-bold text-heading tracking-tight text-lg">
             Recon<span className="text-accent">X</span>

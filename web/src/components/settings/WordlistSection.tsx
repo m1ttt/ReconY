@@ -6,7 +6,6 @@ interface Props {
 }
 
 const inputClass = 'w-full bg-deep border border-border rounded-md px-3 py-2 text-sm font-mono text-heading placeholder:text-muted/50 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20'
-const labelClass = 'text-[11px] font-mono text-muted uppercase tracking-wider'
 
 const groups: { title: string; fields: { key: string; label: string; placeholder: string }[] }[] = [
   {

@@ -3,7 +3,11 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"io"
 	"net/http"
+	"os/exec"
+	"strings"
+	"time"
 
 	"reconx/internal/config"
 	"reconx/internal/engine"
@@ -107,6 +111,13 @@ func (s *Server) NewRouter() *chi.Mux {
 		// System
 		r.Get("/tools/check", s.checkTools)
 		r.Get("/tools/registry", s.getToolRegistry)
+
+		// IP Info
+		r.Get("/ip-info", s.getIPInfo)
+
+		// Mullvad status & rotation
+		r.Get("/mullvad-status", s.getMullvadStatus)
+		r.Post("/mullvad-rotate", s.rotateMullvad)
 	})
 
 	return r
@@ -127,4 +138,158 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 func decodeJSON(r *http.Request, v any) error {
 	defer r.Body.Close()
 	return json.NewDecoder(r.Body).Decode(v)
+}
+
+// ── IP / Mullvad ─────────────────────────────────────────────────────────────
+
+// IPInfoResponse is sent to the frontend header.
+type IPInfoResponse struct {
+	IP          string `json:"ip"`
+	Country     string `json:"country"`
+	CountryCode string `json:"country_code"`
+	City        string `json:"city,omitempty"`
+	IsProxy     bool   `json:"is_proxy"`
+	IsTor       bool   `json:"is_tor"`
+}
+
+// mullvadStatusJSON matches the output of `mullvad status --json`.
+type mullvadStatusJSON struct {
+	State   string `json:"state"`
+	Details struct {
+		Location *struct {
+			IPV4        string `json:"ipv4"`
+			Country     string `json:"country"`
+			City        string `json:"city"`
+			CountryCode string `json:"country_code"`
+			Hostname    string `json:"hostname"`
+		} `json:"location"`
+	} `json:"details"`
+}
+
+// parseMullvadJSON runs `mullvad status --json` and decodes it.
+func parseMullvadJSON() (*mullvadStatusJSON, error) {
+	out, err := exec.Command("mullvad", "status", "--json").Output()
+	if err != nil {
+		return nil, err
+	}
+	var s mullvadStatusJSON
+	return &s, json.Unmarshal(out, &s)
+}
+
+// fetchPublicIP calls http://soporteweb.com which returns the raw public IP
+// as plain text — no rate limits, no API key needed.
+func fetchPublicIP() string {
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get("http://soporteweb.com/")
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+// getIPInfo returns the server's real public IP + geo info.
+// When Mullvad is connected it reads everything from the CLI JSON (zero HTTP).
+// Otherwise fetches the IP from soporteweb.com.
+func (s *Server) getIPInfo(w http.ResponseWriter, r *http.Request) {
+	// Mullvad connected → use CLI data directly, no HTTP call needed
+	if s.Config.Proxy.MullvadCLI {
+		if ms, err := parseMullvadJSON(); err == nil &&
+			ms.State == "connected" &&
+			ms.Details.Location != nil {
+			loc := ms.Details.Location
+			writeJSON(w, http.StatusOK, IPInfoResponse{
+				IP:          loc.IPV4,
+				Country:     loc.Country,
+				CountryCode: loc.CountryCode,
+				City:        loc.City,
+				IsProxy:     true,
+			})
+			return
+		}
+	}
+
+	// Fallback: plain-text IP from soporteweb.com
+	ip := fetchPublicIP()
+	if ip == "" {
+		ip = "Unknown"
+	}
+	writeJSON(w, http.StatusOK, IPInfoResponse{IP: ip, Country: "—"})
+}
+
+// MullvadStatusResponse is the payload for GET /api/v1/mullvad-status.
+type MullvadStatusResponse struct {
+	Enabled   bool   `json:"enabled"`
+	Connected bool   `json:"connected"`
+	Status    string `json:"status"`
+	Country   string `json:"country,omitempty"`
+	City      string `json:"city,omitempty"`
+	IP        string `json:"ip,omitempty"`
+	Hostname  string `json:"hostname,omitempty"`
+}
+
+// getMullvadStatus returns the current Mullvad VPN state parsed from the CLI.
+func (s *Server) getMullvadStatus(w http.ResponseWriter, r *http.Request) {
+	if !s.Config.Proxy.MullvadCLI {
+		writeJSON(w, http.StatusOK, MullvadStatusResponse{Enabled: false})
+		return
+	}
+
+	ms, err := parseMullvadJSON()
+	if err != nil {
+		writeJSON(w, http.StatusOK, MullvadStatusResponse{
+			Enabled: true, Connected: false, Status: "unavailable",
+		})
+		return
+	}
+
+	resp := MullvadStatusResponse{
+		Enabled:   true,
+		Connected: ms.State == "connected",
+		Status:    ms.State,
+	}
+	if ms.Details.Location != nil {
+		resp.Country = ms.Details.Location.Country
+		resp.City = ms.Details.Location.City
+		resp.IP = ms.Details.Location.IPV4
+		resp.Hostname = ms.Details.Location.Hostname
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// rotateMullvad switches the Mullvad relay to the requested location.
+// POST /api/v1/mullvad-rotate  body: {"location": "de"}
+func (s *Server) rotateMullvad(w http.ResponseWriter, r *http.Request) {
+	if !s.Config.Proxy.MullvadCLI {
+		writeError(w, http.StatusBadRequest, "mullvad_cli not enabled")
+		return
+	}
+
+	var body struct {
+		Location string `json:"location"`
+	}
+	if err := decodeJSON(r, &body); err != nil || body.Location == "" {
+		writeError(w, http.StatusBadRequest, "location required")
+		return
+	}
+
+	// Set relay location
+	if out, err := exec.Command("mullvad", "relay", "set", "location", body.Location).CombinedOutput(); err != nil {
+		writeError(w, http.StatusInternalServerError, strings.TrimSpace(string(out)))
+		return
+	}
+
+	// Reconnect (--wait blocks until tunnel established)
+	if out, err := exec.Command("mullvad", "reconnect", "--wait").CombinedOutput(); err != nil {
+		writeError(w, http.StatusInternalServerError, strings.TrimSpace(string(out)))
+		return
+	}
+
+	// Return updated status
+	s.getMullvadStatus(w, r)
 }

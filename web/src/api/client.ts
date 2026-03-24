@@ -26,6 +26,8 @@ export const api = {
   startScan: (wsId: string, data: { workflow?: string; phases?: number[]; tool?: string; targets?: TargetFilter }) =>
     request<any>(`/workspaces/${wsId}/scans`, { method: 'POST', body: JSON.stringify(data) }),
   listScans: (wsId: string) => request<any[]>(`/workspaces/${wsId}/scans`),
+  cancelScan: (wsId: string, jobId: string) =>
+    request<any>(`/workspaces/${wsId}/scans/${jobId}/cancel`, { method: 'POST' }),
   getScanLogs: (wsId: string, jobId: string) => request<any[]>(`/workspaces/${wsId}/scans/${jobId}/logs`),
 
   // Results
@@ -65,6 +67,36 @@ export const api = {
   updateConfig: (data: any) => request<any>('/config', { method: 'PUT', body: JSON.stringify(data) }),
   checkTools: () => request<any[]>('/tools/check'),
   getToolRegistry: () => request<Record<number, ToolRegistryEntry[]>>('/tools/registry'),
+
+  // IP Info
+  getIpInfo: () => request<{
+    ip: string
+    country: string
+    country_code: string
+    city?: string
+    is_proxy: boolean
+    is_tor: boolean
+  }>('/ip-info'),
+
+  // Mullvad status
+  getMullvadStatus: () => request<{
+    enabled: boolean
+    connected: boolean
+    status: string
+    country?: string
+    city?: string
+    ip?: string
+    hostname?: string
+  }>('/mullvad-status'),
+
+  rotateMullvad: (location: string) => request<{
+    enabled: boolean
+    connected: boolean
+    status: string
+    country?: string
+    city?: string
+    ip?: string
+  }>('/mullvad-rotate', { method: 'POST', body: JSON.stringify({ location }) }),
 }
 
 export interface TargetFilter {
