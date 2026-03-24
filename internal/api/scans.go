@@ -5,15 +5,18 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
+	"github.com/go-chi/chi/v5"
 	"reconx/internal/engine"
 	"reconx/internal/models"
-	"github.com/go-chi/chi/v5"
 )
 
 // activeScanCancels tracks cancel functions for running scans.
 var (
 	activeScanCancels = make(map[string]context.CancelFunc)
+	activeScanAliases = make(map[string][]string)           // scan_id -> []scan_job_id aliases
+	activeToolCancels = make(map[string]context.CancelFunc) // workspace|tool -> cancel
 	scanMu            sync.Mutex
 )
 
@@ -42,16 +45,62 @@ func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	scanID := models.NewID()
+	toolKey := ""
+	if req.Tool != "" {
+		toolKey = wsID + "|" + req.Tool
+	}
 
 	scanMu.Lock()
 	activeScanCancels[scanID] = cancel
+	if toolKey != "" {
+		activeToolCancels[toolKey] = cancel
+	}
 	scanMu.Unlock()
+
+	// For single-tool runs, map engine scan_job_id -> same cancel func once scan.started arrives.
+	// This lets /cancel work with the scan_job_id used by the UI timeline.
+	if req.Tool != "" {
+		ch := s.EventBus.Subscribe(wsID)
+		go func() {
+			defer s.EventBus.Unsubscribe(wsID, ch)
+			t := time.NewTimer(20 * time.Second)
+			defer t.Stop()
+
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+					return
+				case ev := <-ch:
+					if ev.Type != engine.EventScanStarted || ev.ToolName != req.Tool || ev.ScanJobID == "" {
+						continue
+					}
+					scanMu.Lock()
+					// Only alias if scanID is still active.
+					if _, ok := activeScanCancels[scanID]; ok {
+						activeScanCancels[ev.ScanJobID] = cancel
+						activeScanAliases[scanID] = append(activeScanAliases[scanID], ev.ScanJobID)
+					}
+					scanMu.Unlock()
+					return
+				}
+			}
+		}()
+	}
 
 	// Run scan in background
 	go func() {
 		defer func() {
 			scanMu.Lock()
+			for _, alias := range activeScanAliases[scanID] {
+				delete(activeScanCancels, alias)
+			}
+			delete(activeScanAliases, scanID)
 			delete(activeScanCancels, scanID)
+			if toolKey != "" {
+				delete(activeToolCancels, toolKey)
+			}
 			scanMu.Unlock()
 			cancel()
 		}()
@@ -81,9 +130,9 @@ func (s *Server) startScan(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	writeJSON(w, 202, map[string]string{
-		"message":  "scan started",
-		"scan_id":  scanID,
-		"status":   "running",
+		"message": "scan started",
+		"scan_id": scanID,
+		"status":  "running",
 	})
 }
 
@@ -155,6 +204,21 @@ func (s *Server) cancelScan(w http.ResponseWriter, r *http.Request) {
 	scanMu.Lock()
 	cancel, ok := activeScanCancels[jobID]
 	scanMu.Unlock()
+
+	if !ok {
+		// Fallback: resolve running job -> workspace/tool and cancel by tool key.
+		var workspaceID, toolName, status string
+		err := s.DB.QueryRowContext(r.Context(),
+			"SELECT workspace_id, tool_name, status FROM scan_jobs WHERE id = ?",
+			jobID,
+		).Scan(&workspaceID, &toolName, &status)
+		if err == nil && status == string(models.ScanStatusRunning) {
+			key := workspaceID + "|" + toolName
+			scanMu.Lock()
+			cancel, ok = activeToolCancels[key]
+			scanMu.Unlock()
+		}
+	}
 
 	if !ok {
 		writeError(w, 404, "no active scan with this ID")

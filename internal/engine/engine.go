@@ -499,6 +499,23 @@ func (e *Engine) buildFilteredInput(ctx context.Context, workspaceID string, pha
 			}
 		}
 		input.Subdomains = filtered
+
+		// Ensure host-targeted chaining works across modules even when hostnames
+		// are not already present as stored subdomain rows.
+		existingHosts := make(map[string]bool, len(input.Subdomains))
+		for _, s := range input.Subdomains {
+			existingHosts[s.Hostname] = true
+		}
+		for _, host := range targets.Hostnames {
+			if host == "" || existingHosts[host] {
+				continue
+			}
+			existingHosts[host] = true
+			input.Subdomains = append(input.Subdomains, models.Subdomain{
+				Hostname: host,
+				IsAlive:  true,
+			})
+		}
 	}
 
 	// Filter ports by ID

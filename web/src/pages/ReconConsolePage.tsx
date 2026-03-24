@@ -1,16 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
-import { api, type TargetFilter } from '../api/client'
+import { api, type TargetFilter, type ToolRegistryEntry } from '../api/client'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { useStore } from '../store'
-import { useReconSession, type ReconStep } from '../store/reconSession'
+import { useReconSession, type ReconStep, type ReconNode } from '../store/reconSession'
 import { SelectableDataTable } from '../components/SelectableDataTable'
 import { GroupedURLTable } from '../components/GroupedURLTable'
 import { ToolResultView } from '../components/ToolResultView'
 import { ActionPanel } from '../components/ActionPanel'
 import { SessionTimeline } from '../components/SessionTimeline'
 import { AuthModal } from '../components/AuthModal'
-import { Crosshair, Zap } from 'lucide-react'
+import { ChainBuilder } from '../components/ChainBuilder'
+import { Crosshair, Zap, Square } from 'lucide-react'
 
 // Column definitions per result type
 // Default sort column per result type (alphabetical grouping)
@@ -252,6 +253,12 @@ const toolResultMap: Record<string, string[]> = {
   whois: ['whois'], dns: ['dns'], waybackurls: ['historical_urls'], gau: ['historical_urls'],
 }
 
+const targetFilterKeyByType: Record<string, keyof TargetFilter> = {
+  subdomains: 'subdomain_ids',
+  ports: 'port_ids',
+  urls: 'url_ids',
+}
+
 function primaryResultType(toolName: string): string {
   return (toolResultMap[toolName] || ['subdomains'])[0]
 }
@@ -262,14 +269,62 @@ function deriveSessionState(steps: ReconStep[]): 'idle' | 'running' | 'reviewing
   return 'idle'
 }
 
+function mapBackendScanStatus(status: string): ReconStep['status'] {
+  if (status === 'running') return 'running'
+  if (status === 'completed') return 'completed'
+  return 'failed'
+}
+
+function dedupe(items: string[]): string[] {
+  return [...new Set(items.filter(Boolean))]
+}
+
+function idsForResultType(rows: any[], resultType: string): string[] {
+  if (!Array.isArray(rows)) return []
+  const def = columnDefs[resultType]
+  if (!def) return []
+  return dedupe(rows.map((r) => def.getId(r)))
+}
+
+function hostnameFromURL(raw?: string): string | null {
+  if (!raw) return null
+  try {
+    return new URL(raw).hostname || null
+  } catch {
+    return null
+  }
+}
+
+function hostnamesForResultType(rows: any[], resultType: string): string[] {
+  if (!Array.isArray(rows)) return []
+  if (resultType === 'subdomains') {
+    return dedupe(rows.map((r) => String(r.hostname || '').trim()).filter(Boolean))
+  }
+  if (resultType === 'urls' || resultType === 'historical_urls') {
+    return dedupe(rows.map((r) => hostnameFromURL(r.url)).filter(Boolean) as string[])
+  }
+  if (resultType === 'technologies' || resultType === 'screenshots' || resultType === 'classifications' || resultType === 'parameters') {
+    return dedupe(rows.map((r) => hostnameFromURL(r.url)).filter(Boolean) as string[])
+  }
+  return []
+}
+
+function hasHostBridge(sourceProduces: string[], targetAccepts: string[]): boolean {
+  if (!targetAccepts.includes('subdomains')) return false
+  const hostish = new Set(['subdomains', 'urls', 'historical_urls', 'technologies', 'screenshots', 'classifications', 'parameters'])
+  return sourceProduces.some((p) => hostish.has(p))
+}
+
 export function ReconConsolePage() {
   const { workspaceId } = useParams()
   const events = useStore((s) => s.events)
   const {
-    state, steps, currentStepIndex, selectedIds, selectedDataType,
+    state, steps, currentStepIndex, selectedIds, selectedDataType, graph,
     setState, addStep, loadSteps, updateStep, setCurrentStep,
     toggleSelected, selectAll, clearSelection,
     setSelectedDataType, reset,
+    addNode, removeNode, connectNodes, disconnectNodes, moveNode, updateNode,
+    setChainRunState, startChain, pauseChain, resumeChain, resetChain,
   } = useReconSession()
 
   const [resultData, setResultData] = useState<any[]>([])
@@ -278,7 +333,13 @@ export function ReconConsolePage() {
   const [sortKey, setSortKey] = useState<string | null>(null)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [scanLogs, setScanLogs] = useState<Array<{ stream: string; line: string; timestamp?: string }>>([])
+  const [toolRegistry, setToolRegistry] = useState<Record<number, ToolRegistryEntry[]>>({})
+  const [connectionHint, setConnectionHint] = useState<string | null>(null)
   const prevWorkspaceRef = useRef(workspaceId)
+  const nodeStepRef = useRef<Record<string, string>>({})
+  const stepNodeRef = useRef<Record<string, string>>({})
+  const nodeOutputRef = useRef<Record<string, { resultType: string; ids: string[]; hostnames: string[] }>>({})
+  const schedulingRef = useRef(false)
 
   const loadResults = useCallback(async (type: string, sort?: string, order?: 'asc' | 'desc', scanJobId?: string) => {
     if (!workspaceId || !fetchMap[type]) return
@@ -310,6 +371,155 @@ export function ReconConsolePage() {
     }
   }, [workspaceId])
 
+  useEffect(() => {
+    api.getToolRegistry().then(setToolRegistry).catch(() => setToolRegistry({}))
+  }, [])
+
+  const allTools = Object.values(toolRegistry).flat()
+  const toolMap = new Map(allTools.map((t) => [t.name, t]))
+
+  const compatibilityForTools = useCallback((sourceToolName: string, targetToolName: string): 'direct' | 'domain-fallback' | 'incompatible' => {
+    const sourceTool = toolMap.get(sourceToolName)
+    const targetTool = toolMap.get(targetToolName)
+    if (!sourceTool || !targetTool) return 'incompatible'
+
+    const direct = sourceTool.produces.some((p) => targetTool.accepts.includes(p))
+    if (direct || hasHostBridge(sourceTool.produces, targetTool.accepts)) return 'direct'
+    if (targetTool.accepts.includes('domain')) return 'domain-fallback'
+    return 'incompatible'
+  }, [toolMap])
+
+  const getEdgeClass = useCallback((fromNodeId: string, toNodeId: string): 'direct' | 'domain-fallback' | 'incompatible' => {
+    const fromNode = graph.nodes.find((n) => n.id === fromNodeId)
+    const toNode = graph.nodes.find((n) => n.id === toNodeId)
+    if (!fromNode || !toNode) return 'incompatible'
+    return compatibilityForTools(fromNode.toolName, toNode.toolName)
+  }, [graph.nodes, compatibilityForTools])
+
+  const getToolCompatibility = useCallback((fromNodeId: string, toToolName: string): 'direct' | 'domain-fallback' | 'incompatible' => {
+    const fromNode = graph.nodes.find((n) => n.id === fromNodeId)
+    if (!fromNode) return 'incompatible'
+    return compatibilityForTools(fromNode.toolName, toToolName)
+  }, [graph.nodes, compatibilityForTools])
+
+  const incomingByNode = useCallback((nodeId: string) => graph.edges.filter((e) => e.to === nodeId), [graph.edges])
+  const outgoingByNode = useCallback((nodeId: string) => graph.edges.filter((e) => e.from === nodeId), [graph.edges])
+
+  const resolveTargetsForNode = useCallback((node: ReconNode): TargetFilter | undefined => {
+    const tool = toolMap.get(node.toolName)
+    if (!tool) return undefined
+
+    const inboundEdges = incomingByNode(node.id)
+    if (inboundEdges.length === 0) return undefined
+
+    const merged: Record<string, string[]> = {}
+    const mergedHosts: string[] = []
+    for (const edge of inboundEdges) {
+      const parentOutput = nodeOutputRef.current[edge.from]
+      if (!parentOutput) continue
+      const key = targetFilterKeyByType[parentOutput.resultType]
+      if (!key || !tool.accepts.includes(parentOutput.resultType)) continue
+      if (!merged[key]) merged[key] = []
+      merged[key].push(...parentOutput.ids)
+      mergedHosts.push(...parentOutput.hostnames)
+    }
+    // Host bridge allows chaining outputs that carry host context into tools
+    // that accept subdomains, even when result type is different.
+    if (tool.accepts.includes('subdomains')) {
+      for (const edge of inboundEdges) {
+        const parentOutput = nodeOutputRef.current[edge.from]
+        if (!parentOutput) continue
+        mergedHosts.push(...parentOutput.hostnames)
+      }
+    }
+
+    const cleaned: TargetFilter = {}
+    for (const [key, values] of Object.entries(merged)) {
+      const unique = dedupe(values)
+      if (unique.length > 0) {
+        ;(cleaned as any)[key] = unique
+      }
+    }
+    const uniqueHosts = dedupe(mergedHosts)
+    if (uniqueHosts.length > 0) {
+      cleaned.hostnames = uniqueHosts
+    }
+    return Object.keys(cleaned).length > 0 ? cleaned : undefined
+  }, [incomingByNode, toolMap])
+
+  const launchNode = useCallback(async (node: ReconNode) => {
+    if (!workspaceId || node.status === 'running' || node.status === 'completed' || node.status === 'failed') return
+    if (steps.some((s) => s.status === 'running' && s.toolName === node.toolName)) return
+
+    const targets = resolveTargetsForNode(node)
+    const targetCount = targets
+      ? dedupe([
+        ...(targets.subdomain_ids || []),
+        ...(targets.port_ids || []),
+        ...(targets.url_ids || []),
+        ...(targets.hostnames || []),
+      ]).length
+      : undefined
+    const resultType = primaryResultType(node.toolName)
+
+    const stepId = `step-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    addStep({
+      id: stepId,
+      toolName: node.toolName,
+      phaseName: '',
+      status: 'running',
+      resultCount: 0,
+      resultType,
+      timestamp: new Date().toISOString(),
+      targetCount,
+    })
+    nodeStepRef.current[node.id] = stepId
+    stepNodeRef.current[stepId] = node.id
+    updateNode(node.id, { status: 'running', resultType, targetCount })
+    setState('running')
+
+    try {
+      await api.startScan(workspaceId, {
+        tool: node.toolName,
+        ...(targets ? { targets } : {}),
+      })
+    } catch {
+      updateStep(stepId, { status: 'failed' })
+      updateNode(node.id, { status: 'failed' })
+    }
+  }, [workspaceId, steps, resolveTargetsForNode, addStep, updateNode, setState, updateStep])
+
+  const scheduleGraph = useCallback(() => {
+    if (graph.runState !== 'running' || schedulingRef.current) return
+    schedulingRef.current = true
+    try {
+      for (const node of graph.nodes) {
+        if (node.status !== 'pending') continue
+        const inboundEdges = incomingByNode(node.id)
+        if (inboundEdges.length === 0) {
+          void launchNode(node)
+          continue
+        }
+
+        const parents = inboundEdges
+          .map((e) => graph.nodes.find((n) => n.id === e.from))
+          .filter(Boolean) as ReconNode[]
+
+        const hasRunningParent = parents.some((p) => p.status === 'running' || p.status === 'pending')
+        if (hasRunningParent) continue
+
+        const hasCompletedParent = parents.some((p) => p.status === 'completed')
+        if (!hasCompletedParent) {
+          updateNode(node.id, { status: 'blocked' })
+          continue
+        }
+        void launchNode(node)
+      }
+    } finally {
+      schedulingRef.current = false
+    }
+  }, [graph.runState, graph.nodes, incomingByNode, launchNode, updateNode])
+
   // Reset when switching workspaces
   useEffect(() => {
     if (prevWorkspaceRef.current !== workspaceId) {
@@ -317,8 +527,11 @@ export function ReconConsolePage() {
       reset()
       setResultData([])
       setScanLogs([])
+      nodeStepRef.current = {}
+      stepNodeRef.current = {}
+      nodeOutputRef.current = {}
     }
-  }, [workspaceId])
+  }, [workspaceId, reset])
 
   // Reconstruct session timeline from backend (source of truth)
   useEffect(() => {
@@ -455,6 +668,96 @@ export function ReconConsolePage() {
     return () => window.removeEventListener('keydown', handler)
   }, [resultData, selectedDataType])
 
+  useEffect(() => {
+    scheduleGraph()
+  }, [scheduleGraph])
+
+  // Reconcile running steps with backend truth in case WS events are missed.
+  useEffect(() => {
+    if (!workspaceId) return
+
+    const hasPendingWork =
+      steps.some((s) => s.status === 'running') ||
+      graph.nodes.some((n) => n.status === 'running' || n.status === 'pending')
+
+    if (!hasPendingWork) return
+
+    let cancelled = false
+    const reconcile = async () => {
+      try {
+        const jobs = await api.listScans(workspaceId)
+        if (cancelled || !Array.isArray(jobs)) return
+
+        const jobById = new Map(jobs.map((j: any) => [j.id, j]))
+
+        for (const step of steps) {
+          if (step.status !== 'running') continue
+
+          let job: any | undefined = step.scanJobId ? jobById.get(step.scanJobId) : undefined
+          if (!job) {
+            // Fallback matching when scan.started event was missed.
+            job = jobs.find((j: any) => j.tool_name === step.toolName && j.status === 'running')
+              || jobs.find((j: any) => j.tool_name === step.toolName)
+          }
+          if (!job) continue
+
+          if (!step.scanJobId && job.id) {
+            updateStep(step.id, { scanJobId: job.id })
+            const nodeId = stepNodeRef.current[step.id]
+            if (nodeId) updateNode(nodeId, { scanJobId: job.id })
+          }
+
+          const mapped = mapBackendScanStatus(job.status)
+          if (mapped === 'running') continue
+
+          updateStep(step.id, {
+            status: mapped,
+            resultCount: typeof job.result_count === 'number' ? job.result_count : step.resultCount,
+            scanJobId: job.id || step.scanJobId,
+          })
+
+          const nodeId = stepNodeRef.current[step.id]
+          if (nodeId) {
+            updateNode(nodeId, {
+              status: mapped,
+              resultCount: typeof job.result_count === 'number' ? job.result_count : undefined,
+              scanJobId: job.id || undefined,
+            })
+          }
+        }
+
+        const nextState = deriveSessionState(
+          steps.map((s) => {
+            if (s.status !== 'running') return s
+            const j = (s.scanJobId && jobById.get(s.scanJobId))
+              || jobs.find((x: any) => x.tool_name === s.toolName && (x.status === 'running' || x.status === 'completed' || x.status === 'failed' || x.status === 'cancelled'))
+            if (!j) return s
+            return { ...s, status: mapBackendScanStatus(j.status) }
+          })
+        )
+        setState(nextState)
+      } catch {
+        // Ignore transient reconcile failures.
+      }
+    }
+
+    void reconcile()
+    const timer = setInterval(reconcile, 4000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [workspaceId, steps, graph.nodes, updateStep, updateNode, setState])
+
+  useEffect(() => {
+    if (graph.runState !== 'running') return
+    const hasRunning = graph.nodes.some((n) => n.status === 'running' || n.status === 'pending')
+    if (!hasRunning && graph.nodes.length > 0) {
+      setChainRunState('completed')
+      setState('reviewing')
+    }
+  }, [graph.runState, graph.nodes, setChainRunState, setState])
+
   // Watch for scan events to update timeline
   useEffect(() => {
     const lastEvent = events[events.length - 1]
@@ -500,6 +803,8 @@ export function ReconConsolePage() {
         || steps.find((s) => s.status === 'running' && s.toolName === lastEvent.tool_name && !s.scanJobId)
       if (currentStep && currentStep.scanJobId !== lastEvent.scan_job_id) {
         updateStep(currentStep.id, { scanJobId: lastEvent.scan_job_id })
+        const nodeId = stepNodeRef.current[currentStep.id]
+        if (nodeId) updateNode(nodeId, { scanJobId: lastEvent.scan_job_id })
         loadScanLogs(lastEvent.scan_job_id)
       }
     }
@@ -510,11 +815,34 @@ export function ReconConsolePage() {
         : undefined) || steps.find((s) => s.status === 'running' && s.toolName === lastEvent.tool_name)
       if (currentStep) {
         const scanJobId = lastEvent.scan_job_id || currentStep.scanJobId
+        const resultType = primaryResultType(lastEvent.tool_name)
         updateStep(currentStep.id, {
           status: 'completed',
           resultCount: lastEvent.data?.result_count || 0,
           scanJobId,
         })
+        const nodeId = stepNodeRef.current[currentStep.id]
+        if (nodeId) {
+          updateNode(nodeId, {
+            status: 'completed',
+            resultCount: lastEvent.data?.result_count || 0,
+            scanJobId,
+            resultType,
+          })
+          if (workspaceId && scanJobId) {
+            void fetchAllResultPages(workspaceId, resultType, defaultSortMap[resultType], 'ASC', scanJobId)
+              .then((rows) => {
+                nodeOutputRef.current[nodeId] = {
+                  resultType,
+                  ids: idsForResultType(rows, resultType),
+                  hostnames: hostnamesForResultType(rows, resultType),
+                }
+              })
+              .catch(() => {
+                nodeOutputRef.current[nodeId] = { resultType, ids: [], hostnames: [] }
+              })
+          }
+        }
         const remaining = steps.filter((s) => s.status === 'running' && s.id !== currentStep.id)
         setState(remaining.length > 0 ? 'running' : 'reviewing')
         loadResults(primaryResultType(lastEvent.tool_name), undefined, undefined, scanJobId)
@@ -533,13 +861,33 @@ export function ReconConsolePage() {
           resultCount: lastEvent.data?.result_count || 0,
           scanJobId,
         })
+        const nodeId = stepNodeRef.current[currentStep.id]
+        if (nodeId) {
+          updateNode(nodeId, {
+            status: 'failed',
+            resultCount: lastEvent.data?.result_count || 0,
+            scanJobId,
+          })
+          nodeOutputRef.current[nodeId] = { resultType: primaryResultType(lastEvent.tool_name), ids: [], hostnames: [] }
+          const children = outgoingByNode(nodeId).map((e) => e.to)
+          for (const childId of children) {
+            const parentIds = incomingByNode(childId).map((e) => e.from)
+            const hasCompletedParent = parentIds.some((pid) => {
+              const parentNode = graph.nodes.find((n) => n.id === pid)
+              return parentNode?.status === 'completed'
+            })
+            if (!hasCompletedParent) {
+              updateNode(childId, { status: 'blocked' })
+            }
+          }
+        }
         const remaining = steps.filter((s) => s.status === 'running' && s.id !== currentStep.id)
         setState(remaining.length > 0 ? 'running' : 'reviewing')
         loadResults(primaryResultType(lastEvent.tool_name), undefined, undefined, scanJobId)
         loadScanLogs(scanJobId)
       }
     }
-  }, [events])
+  }, [events, steps, currentStepIndex, loadResults, loadScanLogs, setSelectedDataType, updateStep, updateNode, outgoingByNode, incomingByNode, graph.nodes, workspaceId, setState])
 
   // Load results when clicking a timeline step — show all results of this type
   const handleSelectStep = useCallback((index: number) => {
@@ -562,9 +910,17 @@ export function ReconConsolePage() {
     let targets: TargetFilter | undefined
     if (selectedIds.size > 0 && selectedDataType) {
       targets = {}
-      if (selectedDataType === 'subdomains') targets.subdomain_ids = [...selectedIds]
-      else if (selectedDataType === 'ports') targets.port_ids = [...selectedIds]
-      else if (selectedDataType === 'urls') targets.url_ids = [...selectedIds]
+      if (selectedDataType === 'subdomains') {
+        targets.subdomain_ids = [...selectedIds]
+        const selectedRows = resultData.filter((r: any) => selectedIds.has(r.id))
+        targets.hostnames = dedupe(selectedRows.map((r: any) => String(r.hostname || '').trim()).filter(Boolean))
+      } else if (selectedDataType === 'ports') {
+        targets.port_ids = [...selectedIds]
+      } else if (selectedDataType === 'urls') {
+        targets.url_ids = [...selectedIds]
+        const selectedRows = resultData.filter((r: any) => selectedIds.has(r.id))
+        targets.hostnames = dedupe(selectedRows.map((r: any) => hostnameFromURL(r.url)).filter(Boolean) as string[])
+      }
     }
 
     const stepId = `step-${Date.now()}`
@@ -598,6 +954,92 @@ export function ReconConsolePage() {
     }
   }, [workspaceId, selectedIds, selectedDataType, steps, addStep, setState, updateStep])
 
+  const handleAddGraphNode = useCallback((toolName: string, x: number, y: number) => {
+    const nodeId = `node-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    addNode({ id: nodeId, toolName, x, y })
+    return nodeId
+  }, [addNode])
+
+  const handleConnectGraphNodes = useCallback((from: string, to: string) => {
+    if (from === to) return
+    const edgeClass = getEdgeClass(from, to)
+    if (edgeClass === 'incompatible') {
+      setConnectionHint('Connection blocked: source output is not compatible with target input.')
+      return
+    }
+    if (edgeClass === 'domain-fallback') {
+      setConnectionHint('Connected with domain fallback: target runs on workspace domain if no compatible output is available.')
+    } else {
+      setConnectionHint('Connected: direct output/input compatibility confirmed.')
+    }
+    connectNodes(from, to)
+  }, [connectNodes, getEdgeClass])
+
+  const handleAddToolAndLink = useCallback((fromNodeId: string, toToolName: string) => {
+    const fromNode = graph.nodes.find((n) => n.id === fromNodeId)
+    if (!fromNode) return
+    const mode = getToolCompatibility(fromNodeId, toToolName)
+    if (mode === 'incompatible') {
+      setConnectionHint('Suggested tool is incompatible with source output.')
+      return
+    }
+    const nodeId = handleAddGraphNode(toToolName, fromNode.x + 220, fromNode.y + 20)
+    handleConnectGraphNodes(fromNodeId, nodeId)
+  }, [graph.nodes, getToolCompatibility, handleAddGraphNode, handleConnectGraphNodes])
+
+  const handleStartChain = useCallback(() => {
+    if (graph.nodes.length === 0) return
+    nodeStepRef.current = {}
+    stepNodeRef.current = {}
+    nodeOutputRef.current = {}
+    startChain()
+    setChainRunState('running')
+    setState('running')
+    setResultData([])
+    setScanLogs([])
+  }, [graph.nodes.length, startChain, setChainRunState, setState])
+
+  const handlePauseChain = useCallback(() => {
+    pauseChain()
+    setChainRunState('paused')
+  }, [pauseChain, setChainRunState])
+
+  const handleResumeChain = useCallback(() => {
+    resumeChain()
+    setChainRunState('running')
+  }, [resumeChain, setChainRunState])
+
+  const handleResetChain = useCallback(() => {
+    nodeStepRef.current = {}
+    stepNodeRef.current = {}
+    nodeOutputRef.current = {}
+    resetChain()
+    setChainRunState('idle')
+  }, [resetChain, setChainRunState])
+
+  const handleStopRunningJobs = useCallback(async () => {
+    if (!workspaceId) return
+    pauseChain()
+    setChainRunState('paused')
+
+    const runningSteps = steps.filter((s) => s.status === 'running')
+    await Promise.allSettled(runningSteps.map(async (step) => {
+      if (step.scanJobId) {
+        try {
+          await api.cancelScan(workspaceId, step.scanJobId)
+        } catch {
+          // The backend reconcile loop will still correct final state if cancel raced.
+        }
+      }
+      updateStep(step.id, { status: 'failed' })
+      const nodeId = stepNodeRef.current[step.id]
+      if (nodeId) {
+        updateNode(nodeId, { status: 'failed' })
+      }
+    }))
+    setState('reviewing')
+  }, [workspaceId, steps, pauseChain, setChainRunState, updateStep, updateNode, setState])
+
   const colDef = columnDefs[selectedDataType || 'subdomains'] || columnDefs.subdomains
   const selectedStep = currentStepIndex >= 0 ? steps[currentStepIndex] : null
   const activeToolName = selectedStep?.toolName || null
@@ -610,7 +1052,7 @@ export function ReconConsolePage() {
         <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center">
           <Crosshair size={16} className="text-accent" />
         </div>
-        <div>
+        <div className="flex-1">
           <h1 className="text-lg font-bold text-heading tracking-tight">Interactive Recon</h1>
           <p className="text-[10px] font-mono text-muted">
             {state === 'idle' && 'Choose a tool to start'}
@@ -623,7 +1065,36 @@ export function ReconConsolePage() {
             {state === 'reviewing' && `${resultData.length} results — select targets for next step`}
           </p>
         </div>
+        <button
+          onClick={handleStopRunningJobs}
+          disabled={runningCount === 0}
+          className="px-3 py-1.5 rounded border border-failed/30 text-failed text-[10px] font-mono inline-flex items-center gap-1 disabled:opacity-35 disabled:cursor-not-allowed hover:bg-failed/10"
+          title="Stop all running jobs"
+        >
+          <Square size={11} />
+          Stop jobs
+        </button>
       </div>
+
+      <ChainBuilder
+        nodes={graph.nodes}
+        edges={graph.edges}
+        runState={graph.runState}
+        tools={allTools}
+        onAddNode={handleAddGraphNode}
+        onMoveNode={moveNode}
+        onRemoveNode={removeNode}
+        onConnectNodes={handleConnectGraphNodes}
+        onDisconnectEdge={disconnectNodes}
+        onStart={handleStartChain}
+        onPause={handlePauseChain}
+        onResume={handleResumeChain}
+        onReset={handleResetChain}
+        connectionHint={connectionHint}
+        getEdgeClass={getEdgeClass}
+        getToolCompatibility={getToolCompatibility}
+        onAddToolAndLink={handleAddToolAndLink}
+      />
 
       {/* 3-Panel Layout */}
       <div className="flex-1 flex gap-3 min-h-0">
@@ -688,7 +1159,6 @@ export function ReconConsolePage() {
                   data={resultData}
                   selectedIds={selectedIds}
                   onToggle={toggleSelected}
-                  onSelectAll={(ids) => selectAll(ids)}
                 />
               )
             }
