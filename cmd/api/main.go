@@ -150,6 +150,7 @@ func registerTools(eng *engine.Engine, cfg *config.Config) {
 	eng.RegisterTool(&phase5.CMSeekRunner{})
 	eng.RegisterTool(&phase5.GoWitnessRunner{})
 	eng.RegisterTool(&phase5.StaticAnalysisRunner{})
+	eng.RegisterTool(&phase5.AIResearchRunner{})
 
 	eng.RegisterTool(&phase6.BucketEnumRunner{})
 	eng.RegisterTool(&phase6.GitDorkRunner{})

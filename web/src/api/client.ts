@@ -68,6 +68,9 @@ export const api = {
   checkTools: () => request<any[]>('/tools/check'),
   getToolRegistry: () => request<Record<number, ToolRegistryEntry[]>>('/tools/registry'),
 
+  // AI
+  askAI: (query: string) => request<{ result: string }>('/ai/ask', { method: 'POST', body: JSON.stringify({ query }) }).then(res => res.result),
+
   // IP Info
   getIpInfo: () => request<{
     ip: string

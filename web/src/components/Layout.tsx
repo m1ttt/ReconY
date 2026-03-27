@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { ConnectionHeader } from './ConnectionHeader'
 import { useWebSocket } from '../hooks/useWebSocket'
+import { AskAIModal } from './AskAIModal'
 
 export function Layout() {
   useWebSocket()
@@ -17,6 +18,7 @@ export function Layout() {
           </div>
         </main>
       </div>
+      <AskAIModal />
     </div>
   )
 }

@@ -167,8 +167,14 @@ export function ConnectionHeader() {
         <span className={`font-medium ${status.color}`}>{status.label}</span>
       </div>
 
-      {/* Right — Mullvad + IP */}
+      {/* Right — Ask AI button, Mullvad + IP */}
       <div className="flex items-center gap-5">
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent('open-ask-ai'))}
+          className="flex items-center gap-1.5 px-3 py-1 rounded bg-accent/10 text-accent hover:bg-accent/20 transition-colors border border-accent/20"
+        >
+          <span className="text-sm">✨</span> Ask AI
+        </button>
 
         {/* Mullvad badge + country picker (only when enabled in config) */}
         {mullvad?.enabled && (
