@@ -23,9 +23,11 @@ class AgentState(TypedDict):
 
 # We defer initialization so that we can pick up dynamic environment variables
 # when process_query is called per-request.
-def get_agent():
+def get_agent(model_name: str = None):
     # Initialize the LLM
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    if not model_name:
+        model_name = "gpt-4o-mini"
+    llm = ChatOpenAI(model=model_name, temperature=0)
 
     # Initialize the Tavily tool
     tavily_tool = TavilySearchResults(max_results=3, include_raw_content=True)
@@ -72,12 +74,12 @@ def get_agent():
     # Compile the graph
     return graph_builder.compile()
 
-def process_query(query: str) -> str:
+def process_query(query: str, model_name: str = None) -> str:
     """
     Takes a user query, runs it through the LangGraph agent,
     and returns the final string response.
     """
-    agent = get_agent()
+    agent = get_agent(model_name)
     initial_state = {"messages": [HumanMessage(content=query)]}
 
     # Run the graph

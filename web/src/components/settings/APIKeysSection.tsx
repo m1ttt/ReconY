@@ -15,6 +15,8 @@ const keys: { field: string; label: string; placeholder: string; isUrl?: boolean
   { field: 'censys_secret', label: 'Censys API Secret', placeholder: 'Enter Censys secret...' },
   { field: 'github_token', label: 'GitHub Token', placeholder: 'ghp_...' },
   { field: 'openai_key', label: 'OpenAI API Key', placeholder: 'sk-...' },
+  { field: 'openai_base_url', label: 'OpenAI Base URL (Optional)', placeholder: 'https://api.openai.com/v1', isUrl: true },
+  { field: 'openai_model', label: 'OpenAI Model (Optional)', placeholder: 'gpt-4o-mini', isUrl: true },
   { field: 'tavily_key', label: 'Tavily API Key', placeholder: 'tvly-...' },
   { field: 'ai_service_url', label: 'AI Service URL', placeholder: 'http://localhost:8000', isUrl: true },
 ]

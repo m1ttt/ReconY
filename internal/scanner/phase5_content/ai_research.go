@@ -32,6 +32,8 @@ func (r *AIResearchRunner) Check() error {
 type aiRequest struct {
 	Query         string `json:"query"`
 	OpenAIAPIKey  string `json:"openai_api_key,omitempty"`
+	OpenAIBaseURL string `json:"openai_base_url,omitempty"`
+	OpenAIModel   string `json:"openai_model,omitempty"`
 	TavilyAPIKey  string `json:"tavily_api_key,omitempty"`
 }
 
@@ -60,9 +62,11 @@ func (r *AIResearchRunner) Run(ctx context.Context, input *engine.PhaseInput, si
 		query := fmt.Sprintf("Find the latest security vulnerabilities, exposed assets, and technology stack information for %s", t)
 
 		reqBody, err := json.Marshal(aiRequest{
-			Query:        query,
-			OpenAIAPIKey: input.Config.APIKeys.OpenAIKey,
-			TavilyAPIKey: input.Config.APIKeys.TavilyKey,
+			Query:         query,
+			OpenAIAPIKey:  input.Config.APIKeys.OpenAIKey,
+			OpenAIBaseURL: input.Config.APIKeys.OpenAIBaseURL,
+			OpenAIModel:   input.Config.APIKeys.OpenAIModel,
+			TavilyAPIKey:  input.Config.APIKeys.TavilyKey,
 		})
 		if err != nil {
 			sink.LogLine(ctx, "stderr", fmt.Sprintf("Failed to marshal request for %s: %v", t, err))
