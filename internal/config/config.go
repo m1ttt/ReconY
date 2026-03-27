@@ -38,6 +38,9 @@ type APIKeysConfig struct {
 	CensysID     string `yaml:"censys_id" json:"censys_id"`
 	CensysSecret string `yaml:"censys_secret" json:"censys_secret"`
 	GithubToken  string `yaml:"github_token" json:"github_token"`
+	OpenAIKey    string `yaml:"openai_key" json:"openai_key"`
+	TavilyKey    string `yaml:"tavily_key" json:"tavily_key"`
+	AIServiceURL string `yaml:"ai_service_url" json:"ai_service_url"`
 }
 
 // ToolConfig is the per-tool configuration. Each tool can override these.
@@ -121,6 +124,12 @@ func (c *Config) Redacted() Config {
 	}
 	if copy.APIKeys.GithubToken != "" {
 		copy.APIKeys.GithubToken = "***"
+	}
+	if copy.APIKeys.OpenAIKey != "" {
+		copy.APIKeys.OpenAIKey = "***"
+	}
+	if copy.APIKeys.TavilyKey != "" {
+		copy.APIKeys.TavilyKey = "***"
 	}
 	return copy
 }

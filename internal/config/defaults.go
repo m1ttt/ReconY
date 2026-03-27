@@ -27,7 +27,9 @@ func DefaultConfig() *Config {
 			RateLimitPerHost:   10,
 			MaxRetries:         3,
 		},
-		APIKeys: APIKeysConfig{},
+		APIKeys: APIKeysConfig{
+			AIServiceURL: "http://localhost:8000",
+		},
 		Proxy: ProxyConfig{
 			RotateEveryN:     50,
 			RotateInterval:   "5m",

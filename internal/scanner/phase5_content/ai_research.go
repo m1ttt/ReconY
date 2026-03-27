@@ -30,7 +30,9 @@ func (r *AIResearchRunner) Check() error {
 
 // Request payload for the python ai-service
 type aiRequest struct {
-	Query string `json:"query"`
+	Query         string `json:"query"`
+	OpenAIAPIKey  string `json:"openai_api_key,omitempty"`
+	TavilyAPIKey  string `json:"tavily_api_key,omitempty"`
 }
 
 // Response payload from the python ai-service
@@ -57,14 +59,23 @@ func (r *AIResearchRunner) Run(ctx context.Context, input *engine.PhaseInput, si
 
 		query := fmt.Sprintf("Find the latest security vulnerabilities, exposed assets, and technology stack information for %s", t)
 
-		reqBody, err := json.Marshal(aiRequest{Query: query})
+		reqBody, err := json.Marshal(aiRequest{
+			Query:        query,
+			OpenAIAPIKey: input.Config.APIKeys.OpenAIKey,
+			TavilyAPIKey: input.Config.APIKeys.TavilyKey,
+		})
 		if err != nil {
 			sink.LogLine(ctx, "stderr", fmt.Sprintf("Failed to marshal request for %s: %v", t, err))
 			continue
 		}
 
-		// Assuming the python service is running on localhost:8000
-		req, err := http.NewRequestWithContext(ctx, "POST", "http://localhost:8000/research", bytes.NewBuffer(reqBody))
+		aiURL := input.Config.APIKeys.AIServiceURL
+		if aiURL == "" {
+			aiURL = "http://localhost:8000"
+		}
+		endpoint := fmt.Sprintf("%s/research", aiURL)
+
+		req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewBuffer(reqBody))
 		if err != nil {
 			sink.LogLine(ctx, "stderr", fmt.Sprintf("Failed to create request for %s: %v", t, err))
 			continue

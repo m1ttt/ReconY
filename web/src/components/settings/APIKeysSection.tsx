@@ -9,11 +9,14 @@ interface Props {
 const inputClass = 'flex-1 bg-deep border border-border rounded-md px-3 py-2 text-sm font-mono text-heading placeholder:text-muted/50 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20'
 const labelClass = 'text-[11px] font-mono text-muted uppercase tracking-wider'
 
-const keys: { field: string; label: string; placeholder: string }[] = [
+const keys: { field: string; label: string; placeholder: string; isUrl?: boolean }[] = [
   { field: 'shodan', label: 'Shodan API Key', placeholder: 'Enter Shodan API key...' },
   { field: 'censys_id', label: 'Censys API ID', placeholder: 'Enter Censys API ID...' },
   { field: 'censys_secret', label: 'Censys API Secret', placeholder: 'Enter Censys secret...' },
   { field: 'github_token', label: 'GitHub Token', placeholder: 'ghp_...' },
+  { field: 'openai_key', label: 'OpenAI API Key', placeholder: 'sk-...' },
+  { field: 'tavily_key', label: 'Tavily API Key', placeholder: 'tvly-...' },
+  { field: 'ai_service_url', label: 'AI Service URL', placeholder: 'http://localhost:8000', isUrl: true },
 ]
 
 export function APIKeysSection({ config, onChange }: Props) {
@@ -40,10 +43,10 @@ export function APIKeysSection({ config, onChange }: Props) {
       </p>
 
       <div className="space-y-4">
-        {keys.map(({ field, label, placeholder }) => {
+        {keys.map(({ field, label, placeholder, isUrl }) => {
           const value = ak[field] || ''
           const isMasked = value === '***'
-          const isVisible = visible[field]
+          const isVisible = isUrl || visible[field]
 
           return (
             <div key={field}>
@@ -56,14 +59,16 @@ export function APIKeysSection({ config, onChange }: Props) {
                   onChange={(e) => update(field, e.target.value)}
                   className={inputClass}
                 />
-                <button
-                  type="button"
-                  onClick={() => toggle(field)}
-                  className="p-2 rounded text-muted hover:text-accent hover:bg-accent/10 transition-colors"
-                  title={isVisible ? 'Hide' : 'Show'}
-                >
-                  {isVisible ? <EyeOff size={15} /> : <Eye size={15} />}
-                </button>
+                {!isUrl && (
+                  <button
+                    type="button"
+                    onClick={() => toggle(field)}
+                    className="p-2 rounded text-muted hover:text-accent hover:bg-accent/10 transition-colors"
+                    title={isVisible ? 'Hide' : 'Show'}
+                  >
+                    {isVisible ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                )}
                 {isMasked && (
                   <span className="text-[9px] font-mono text-completed/70 bg-completed/10 px-1.5 py-0.5 rounded border border-completed/20">
                     SET
