@@ -112,6 +112,9 @@ func (s *Server) NewRouter() *chi.Mux {
 		r.Get("/tools/check", s.checkTools)
 		r.Get("/tools/registry", s.getToolRegistry)
 
+		// AI
+		r.Post("/ai/ask", s.askAI)
+
 		// IP Info
 		r.Get("/ip-info", s.getIPInfo)
 
