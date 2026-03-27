@@ -245,6 +245,7 @@ const toolResultMap: Record<string, string[]> = {
   subfinder: ['subdomains'], crtsh: ['subdomains'], amass: ['subdomains'], puredns: ['subdomains'],
   nmap: ['ports'], shodan: ['ports'], censys: ['ports'],
   httpx: ['technologies'], waf_detect: ['classifications'], ssl_analyze: ['classifications'], classify: ['classifications'],
+  ai_research: ['classifications'],
   katana: ['urls'], ffuf: ['urls'], feroxbuster: ['urls'], gowitness: ['screenshots'], cmseek: ['technologies'],
   paramspider: ['parameters'], jsluice: ['urls', 'secrets'], secretfinder: ['secrets'],
   'static-analysis': ['urls', 'secrets'],
@@ -1151,7 +1152,7 @@ export function ReconConsolePage() {
             </div>
           ) : (() => {
             // Tool-specific views for tools that need custom rendering
-            const toolsWithCustomView = ['waf_detect', 'ssl_analyze', 'classify', 'whois', 'dns']
+            const toolsWithCustomView = ['waf_detect', 'ssl_analyze', 'classify', 'ai_research', 'whois', 'dns']
             if (activeToolName && toolsWithCustomView.includes(activeToolName)) {
               return (
                 <ToolResultView

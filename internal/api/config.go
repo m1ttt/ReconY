@@ -34,6 +34,12 @@ func (s *Server) updateConfig(w http.ResponseWriter, r *http.Request) {
 	if newCfg.APIKeys.GithubToken == "***" {
 		newCfg.APIKeys.GithubToken = s.Config.APIKeys.GithubToken
 	}
+	if newCfg.APIKeys.OpenAIKey == "***" {
+		newCfg.APIKeys.OpenAIKey = s.Config.APIKeys.OpenAIKey
+	}
+	if newCfg.APIKeys.TavilyKey == "***" {
+		newCfg.APIKeys.TavilyKey = s.Config.APIKeys.TavilyKey
+	}
 
 	// Save to global config file
 	home, err := os.UserHomeDir()

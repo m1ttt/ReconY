@@ -45,3 +45,5 @@ screenshots/
 wordlists/
 output/
 results/
+ai-service/venv/*
+ai-service/__pycache__/*

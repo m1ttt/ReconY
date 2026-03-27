@@ -1,5 +1,10 @@
 const BASE = '/api/v1'
 
+export interface AskAIMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 async function request<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { 'Content-Type': 'application/json' },
@@ -70,6 +75,60 @@ export const api = {
 
   // AI
   askAI: (query: string) => request<{ result: string }>('/ai/ask', { method: 'POST', body: JSON.stringify({ query }) }).then(res => res.result),
+  askAIStream: async (
+    query: string,
+    messages: AskAIMessage[],
+    handlers: {
+      onStatus?: (status: string) => void
+      onChunk?: (chunk: string) => void
+      onDone?: () => void
+      onError?: (error: string) => void
+      onLangGraphEvent?: (event: { event?: string; name?: string; data?: Record<string, unknown> }) => void
+    }
+  ) => {
+    const res = await fetch(`${BASE}/ai/ask/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, messages }),
+    })
+
+    if (!res.ok || !res.body) {
+      const body = await res.json().catch(() => ({ error: res.statusText }))
+      throw new Error(body.error || res.statusText)
+    }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const events = buffer.split('\n\n')
+      buffer = events.pop() || ''
+
+      for (const rawEvent of events) {
+        const dataLine = rawEvent
+          .split('\n')
+          .find((line) => line.startsWith('data: '))
+
+        if (!dataLine) continue
+
+        try {
+          const payload = JSON.parse(dataLine.slice(6))
+          if (payload.type === 'status' && payload.status) handlers.onStatus?.(payload.status)
+          if (payload.type === 'chunk' && payload.content) handlers.onChunk?.(payload.content)
+          if (payload.type === 'done') handlers.onDone?.()
+          if (payload.type === 'error' && payload.error) handlers.onError?.(payload.error)
+          if (payload.type === 'langgraph') handlers.onLangGraphEvent?.(payload)
+        } catch {
+          // Ignore malformed SSE payloads from partial chunks.
+        }
+      }
+    }
+  },
 
   // IP Info
   getIpInfo: () => request<{

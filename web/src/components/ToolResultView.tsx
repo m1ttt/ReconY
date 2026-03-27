@@ -27,6 +27,8 @@ export function ToolResultView({ toolName, data, selectedIds, onToggle }: Props)
       return <SSLResultView data={data} selectedIds={selectedIds} onToggle={onToggle} />
     case 'classify':
       return <ClassifyResultView data={data} selectedIds={selectedIds} onToggle={onToggle} />
+    case 'ai_research':
+      return <AIResearchResultView data={data} selectedIds={selectedIds} onToggle={onToggle} />
     case 'whois':
       return <WhoisResultView data={data} />
     case 'dns':
@@ -34,6 +36,41 @@ export function ToolResultView({ toolName, data, selectedIds, onToggle }: Props)
     default:
       return null // Use default table
   }
+}
+
+function AIResearchResultView({ data, selectedIds, onToggle }: { data: any[]; selectedIds: Set<string>; onToggle: (id: string) => void }) {
+  return (
+    <div className="bg-surface border border-border rounded-lg overflow-hidden">
+      <div className="divide-y divide-border/40">
+        {data.map((row) => (
+          <div
+            key={row.id}
+            onClick={() => onToggle(row.id)}
+            className={clsx(
+              'px-4 py-4 cursor-pointer transition-colors',
+              selectedIds.has(row.id) ? 'bg-accent/5 hover:bg-accent/10' : 'hover:bg-raised/30'
+            )}
+          >
+            <div className="flex items-start gap-4">
+              <input
+                type="checkbox"
+                checked={selectedIds.has(row.id)}
+                onChange={() => onToggle(row.id)}
+                onClick={(e) => e.stopPropagation()}
+                className="mt-1 w-3.5 h-3.5 rounded border-border bg-deep accent-accent cursor-pointer shrink-0"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="font-mono text-xs text-heading truncate">{row.url}</div>
+                <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-text">
+                  {row.evidence || 'No AI research evidence saved yet.'}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 // ─── WAF Detection ─────────────────────────────────────────────
