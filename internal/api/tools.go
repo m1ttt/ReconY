@@ -52,6 +52,7 @@ var toolMeta = map[string]struct {
 	"cmseek":       {Accepts: []string{"domain", "subdomains"}, Produces: []string{"technologies"}},
 	"gowitness":    {Accepts: []string{"domain", "subdomains", "urls"}, Produces: []string{"screenshots"}},
 	"static-analysis": {Accepts: []string{"domain", "subdomains", "urls"}, Produces: []string{"secrets", "urls", "parameters"}},
+	"ai_research":  {Accepts: []string{"domain", "subdomains", "urls"}, Produces: []string{"classifications"}},
 
 	// Phase 6 - Cloud
 	"bucket_enum":  {Accepts: []string{"domain", "subdomains"}, Produces: []string{"cloud_assets"}},
