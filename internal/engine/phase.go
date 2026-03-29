@@ -66,11 +66,13 @@ type PhaseInput struct {
 	Ports           []models.Port
 	Technologies    []models.Technology
 	Classifications []models.SiteClassification
+	DNSRecords      []models.DNSRecord
+	WhoisRecords    []models.WhoisRecord
 	DiscoveredURLs  []models.DiscoveredURL // URLs from previous scans (for JS analysis, etc.)
 	HistoricalURLs  []models.HistoricalURL // URLs from waybackurls/gau
 	Config          *config.Config
 	ScanJobID       string
-	ProxyURL        string                // proxy URL for external tool env injection
+	ProxyURL        string                 // proxy URL for external tool env injection
 	AuthSessions    []*httpkit.AuthSession // active auth sessions for authenticated crawling
 }
 

@@ -406,6 +406,34 @@ func (e *Engine) buildInput(ctx context.Context, workspaceID string, phaseID Pha
 			}
 			input.Classifications = append(input.Classifications, c)
 		}
+
+		dnsRows, err := e.db.QueryContext(ctx,
+			"SELECT id, workspace_id, host, record_type, value, ttl, priority, scan_job_id, created_at FROM dns_records WHERE workspace_id = ?",
+			workspaceID)
+		if err == nil {
+			defer dnsRows.Close()
+			for dnsRows.Next() {
+				var record models.DNSRecord
+				if err := dnsRows.Scan(&record.ID, &record.WorkspaceID, &record.Host, &record.RecordType, &record.Value, &record.TTL, &record.Priority, &record.ScanJobID, &record.CreatedAt); err != nil {
+					continue
+				}
+				input.DNSRecords = append(input.DNSRecords, record)
+			}
+		}
+
+		whoisRows, err := e.db.QueryContext(ctx,
+			"SELECT id, workspace_id, domain, registrar, org, country, creation_date, expiry_date, name_servers, raw, asn, asn_org, asn_cidr, scan_job_id, created_at FROM whois_records WHERE workspace_id = ?",
+			workspaceID)
+		if err == nil {
+			defer whoisRows.Close()
+			for whoisRows.Next() {
+				var record models.WhoisRecord
+				if err := whoisRows.Scan(&record.ID, &record.WorkspaceID, &record.Domain, &record.Registrar, &record.Org, &record.Country, &record.CreationDate, &record.ExpiryDate, &record.NameServers, &record.Raw, &record.ASN, &record.ASNOrg, &record.ASNCIDR, &record.ScanJobID, &record.CreatedAt); err != nil {
+					continue
+				}
+				input.WhoisRecords = append(input.WhoisRecords, record)
+			}
+		}
 	}
 
 	// Load discovered URLs and historical URLs for JS analysis (phases 5+)
