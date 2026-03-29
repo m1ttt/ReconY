@@ -172,6 +172,7 @@ export interface ToolRegistryEntry {
   name: string
   phase: number
   phase_name: string
+  description: string
   available: boolean
   accepts: string[]
   produces: string[]

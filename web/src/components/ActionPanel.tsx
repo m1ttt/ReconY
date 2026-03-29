@@ -115,13 +115,17 @@ export function ActionPanel({ selectedDataType, selectedCount, onRunTool, onSetu
             )} />
             <div className="min-w-0 flex-1">
               <div className={clsx(
-                'text-[11px] font-mono',
+                'text-[11px] font-mono mb-0.5',
                 selectedTool === tool.name ? 'text-accent' : 'text-heading'
               )}>
                 {tool.name}
               </div>
-              <div className="text-[9px] font-mono text-muted">
-                {tool.phase_name} &middot; {tool.produces.join(', ')}
+              <div className="text-[9px] font-mono text-muted/80 leading-tight mb-1">
+                {tool.description}
+              </div>
+              <div className="text-[9px] font-mono text-muted flex flex-wrap gap-1">
+                <span className="bg-surface px-1 py-0.5 rounded border border-border/50">in: {tool.accepts.join(', ')}</span>
+                <span className="bg-surface px-1 py-0.5 rounded border border-border/50">out: {tool.produces.join(', ')}</span>
               </div>
             </div>
             {!tool.available && (
