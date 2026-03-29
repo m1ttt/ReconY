@@ -114,6 +114,7 @@ func (s *Server) NewRouter() *chi.Mux {
 
 		// AI
 		r.Post("/ai/ask", s.askAI)
+		r.Post("/ai/ask/stream", s.askAIStream)
 
 		// IP Info
 		r.Get("/ip-info", s.getIPInfo)

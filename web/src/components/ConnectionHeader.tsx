@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Bot } from 'lucide-react'
 import { useStore } from '../store'
 import { api } from '../api/client'
 
@@ -173,7 +174,7 @@ export function ConnectionHeader() {
           onClick={() => window.dispatchEvent(new CustomEvent('open-ask-ai'))}
           className="flex items-center gap-1.5 px-3 py-1 rounded bg-accent/10 text-accent hover:bg-accent/20 transition-colors border border-accent/20"
         >
-          <span className="text-sm">✨</span> Ask AI
+          <Bot size={14} /> Ask AI
         </button>
 
         {/* Mullvad badge + country picker (only when enabled in config) */}

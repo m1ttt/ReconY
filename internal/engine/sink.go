@@ -360,6 +360,8 @@ func (s *DBSink) AddSiteClassification(ctx context.Context, c *models.SiteClassi
 			waf_detected = COALESCE(excluded.waf_detected, waf_detected),
 			cdn_detected = COALESCE(excluded.cdn_detected, cdn_detected),
 			ssl_grade = COALESCE(excluded.ssl_grade, ssl_grade),
+			ssl_details = COALESCE(excluded.ssl_details, ssl_details),
+			evidence = COALESCE(excluded.evidence, evidence),
 			scan_job_id = excluded.scan_job_id
 	`, c.ID, c.WorkspaceID, c.SubdomainID, c.URL, c.SiteType, c.InfraType, c.WAFDetected, c.CDNDetected, c.SSLGrade, c.SSLDetails, c.Evidence, c.ScanJobID, c.CreatedAt)
 	if err != nil {
