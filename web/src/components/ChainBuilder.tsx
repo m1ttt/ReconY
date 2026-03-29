@@ -177,10 +177,15 @@ export function ChainBuilder({
               draggable
               onDragStart={(e) => handlePaletteDragStart(e, tool.name)}
               className="px-2 py-1.5 rounded border border-border hover:border-accent/40 hover:bg-raised/50 cursor-grab active:cursor-grabbing"
-              title="Drag to canvas"
+              title={tool.description}
             >
               <div className="text-[11px] font-mono text-heading">{tool.name}</div>
-              <div className="text-[9px] font-mono text-muted">{tool.phase_name}</div>
+              <div className="text-[9px] font-mono text-muted mb-1">{tool.phase_name}</div>
+              <div className="text-[8px] font-mono text-muted/60 leading-tight">
+                in: {tool.accepts.join(',')}
+                <br/>
+                out: {tool.produces.join(',')}
+              </div>
             </div>
           ))}
         </div>
